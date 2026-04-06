@@ -2415,6 +2415,219 @@ $(B)/$(SERVERBIN)$(FULLBINEXT): $(Q3DOBJ)
 
 
 #############################################################################
+# MEMTEST BUILD
+#
+# Headless game-loop simulation for memory benchmarking and seL4 porting.
+#
+# Differences from the dedicated-server build (Q3DOBJ):
+#   - net_ip.o  -> null_net_ip.o   (no sockets; loopback only)
+#   - sys_main.o is compiled with -DMEMTEST_BUILD (main() excluded)
+#   - sys_bench.o provides the benchmark main()
+#   - Compiled with both -DDEDICATED and -DMEMTEST_BUILD
+#
+# Build with:
+#   make memtest
+# or debug variant:
+#   make memtest-debug
+#
+# Run example (requires OpenArena game data in basedir):
+#   ./build/release-darwin-arm64/oa_bench \
+#       +set dedicated 1 +set fs_basepath /path/to/openarena-data \
+#       +map q3dm1 +addbot Keel 1 --bench-frames 2000
+#############################################################################
+
+BENCHBIN=oa_bench
+
+define DO_BENCH_CC
+$(echo_cmd) "BENCH_CC $<"
+$(Q)$(CC) $(NOTSHLIBCFLAGS) -DDEDICATED -DMEMTEST_BUILD -DNO_VM_COMPILED $(CFLAGS) $(SERVER_CFLAGS) $(OPTIMIZE) -o $@ -c $<
+endef
+
+define DO_BENCH_BOT_CC
+$(echo_cmd) "BENCH_BOT_CC $<"
+$(Q)$(CC) $(NOTSHLIBCFLAGS) -DDEDICATED -DMEMTEST_BUILD -DNO_VM_COMPILED $(CFLAGS) $(BOTCFLAGS) $(OPTIMIZE) -DBOTLIB -o $@ -c $<
+endef
+
+Q3BENCHOBJ = \
+  $(B)/bench/sv_bot.o \
+  $(B)/bench/sv_client.o \
+  $(B)/bench/sv_ccmds.o \
+  $(B)/bench/sv_game.o \
+  $(B)/bench/sv_init.o \
+  $(B)/bench/sv_main.o \
+  $(B)/bench/sv_net_chan.o \
+  $(B)/bench/sv_snapshot.o \
+  $(B)/bench/sv_world.o \
+  \
+  $(B)/bench/cm_load.o \
+  $(B)/bench/cm_patch.o \
+  $(B)/bench/cm_polylib.o \
+  $(B)/bench/cm_test.o \
+  $(B)/bench/cm_trace.o \
+  $(B)/bench/cmd.o \
+  $(B)/bench/common.o \
+  $(B)/bench/cvar.o \
+  $(B)/bench/files.o \
+  $(B)/bench/md4.o \
+  $(B)/bench/msg.o \
+  $(B)/bench/net_chan.o \
+  $(B)/bench/null_net_ip.o \
+  $(B)/bench/huffman.o \
+  \
+  $(B)/bench/q_math.o \
+  $(B)/bench/q_shared.o \
+  \
+  $(B)/bench/unzip.o \
+  $(B)/bench/ioapi.o \
+  $(B)/bench/vm.o \
+  $(B)/bench/vm_interpreted.o \
+  \
+  $(B)/bench/be_aas_bspq3.o \
+  $(B)/bench/be_aas_cluster.o \
+  $(B)/bench/be_aas_debug.o \
+  $(B)/bench/be_aas_entity.o \
+  $(B)/bench/be_aas_file.o \
+  $(B)/bench/be_aas_main.o \
+  $(B)/bench/be_aas_move.o \
+  $(B)/bench/be_aas_optimize.o \
+  $(B)/bench/be_aas_reach.o \
+  $(B)/bench/be_aas_route.o \
+  $(B)/bench/be_aas_routealt.o \
+  $(B)/bench/be_aas_sample.o \
+  $(B)/bench/be_ai_char.o \
+  $(B)/bench/be_ai_chat.o \
+  $(B)/bench/be_ai_gen.o \
+  $(B)/bench/be_ai_goal.o \
+  $(B)/bench/be_ai_move.o \
+  $(B)/bench/be_ai_weap.o \
+  $(B)/bench/be_ai_weight.o \
+  $(B)/bench/be_ea.o \
+  $(B)/bench/be_interface.o \
+  $(B)/bench/l_crc.o \
+  $(B)/bench/l_libvar.o \
+  $(B)/bench/l_log.o \
+  $(B)/bench/l_memory.o \
+  $(B)/bench/l_precomp.o \
+  $(B)/bench/l_script.o \
+  $(B)/bench/l_struct.o \
+  \
+  $(B)/bench/null_client.o \
+  $(B)/bench/null_input.o \
+  $(B)/bench/null_snddma.o \
+  \
+  $(B)/bench/con_log.o \
+  $(B)/bench/sys_main.o \
+  $(B)/bench/sys_bench.o
+
+ifeq ($(ARCH),x86)
+  Q3BENCHOBJ += \
+      $(B)/bench/matha.o \
+      $(B)/bench/snapvector.o \
+      $(B)/bench/ftola.o
+endif
+ifeq ($(ARCH),x86_64)
+  Q3BENCHOBJ += \
+      $(B)/bench/snapvector.o \
+      $(B)/bench/ftola.o
+endif
+
+ifeq ($(USE_INTERNAL_ZLIB),1)
+Q3BENCHOBJ += \
+  $(B)/bench/adler32.o \
+  $(B)/bench/crc32.o \
+  $(B)/bench/inffast.o \
+  $(B)/bench/inflate.o \
+  $(B)/bench/inftrees.o \
+  $(B)/bench/zutil.o
+endif
+
+ifeq ($(HAVE_VM_COMPILED),true)
+  ifneq ($(findstring $(ARCH),x86 x86_64),)
+    Q3BENCHOBJ += \
+      $(B)/bench/vm_x86.o
+  else ifneq ($(findstring $(ARCH),ppc ppc64),)
+    Q3BENCHOBJ += $(B)/bench/vm_powerpc.o $(B)/bench/vm_powerpc_asm.o
+  else ifeq ($(ARCH),sparc)
+    Q3BENCHOBJ += $(B)/bench/vm_sparc.o
+  endif
+endif
+# vm_none.o is not needed: -DNO_VM_COMPILED forces the bytecode interpreter
+# for all architectures in the bench build.
+
+ifeq ($(PLATFORM),mingw32)
+  Q3BENCHOBJ += \
+    $(B)/bench/win_resource.o \
+    $(B)/bench/sys_win32.o \
+    $(B)/bench/con_win32.o
+else
+  Q3BENCHOBJ += \
+    $(B)/bench/sys_unix.o \
+    $(B)/bench/con_tty.o
+endif
+
+ifeq ($(PLATFORM),darwin)
+  Q3BENCHOBJ += \
+    $(B)/bench/sys_osx.o
+endif
+
+$(B)/$(BENCHBIN)$(FULLBINEXT): $(Q3BENCHOBJ)
+	$(echo_cmd) "LD $@"
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(Q3BENCHOBJ) $(LIBS)
+
+# Compile rules for bench/ — same source trees as ded/ but use DO_BENCH_CC
+$(B)/bench/%.o: $(ASMDIR)/%.s
+	$(DO_AS)
+
+$(B)/bench/%.o: $(ASMDIR)/%.c
+	$(DO_BENCH_CC) -march=k8 -mmmx -msse2
+
+$(B)/bench/%.o: $(SDIR)/%.c
+	$(DO_BENCH_CC)
+
+$(B)/bench/%.o: $(CMDIR)/%.c
+	$(DO_BENCH_CC)
+
+$(B)/bench/%.o: $(ZDIR)/%.c
+	$(DO_BENCH_CC)
+
+$(B)/bench/%.o: $(BLIBDIR)/%.c
+	$(DO_BENCH_BOT_CC)
+
+$(B)/bench/%.o: $(SYSDIR)/%.c
+	$(DO_BENCH_CC)
+
+$(B)/bench/%.o: $(SYSDIR)/%.m
+	$(DO_BENCH_CC)
+
+$(B)/bench/%.o: $(SYSDIR)/%.rc
+	$(DO_WINDRES)
+
+$(B)/bench/%.o: $(NDIR)/%.c
+	$(DO_BENCH_CC)
+
+# High-level memtest targets (parallel to the existing debug / release pair)
+memtest:
+	@$(MAKE) bench-targets B=$(BR) CFLAGS="$(CFLAGS) $(BASE_CFLAGS) $(DEPEND_CFLAGS)" \
+	  OPTIMIZE="-DNDEBUG $(OPTIMIZE)" OPTIMIZEVM="-DNDEBUG $(OPTIMIZEVM)" \
+	  SERVER_CFLAGS="$(SERVER_CFLAGS)" V=$(V)
+
+memtest-debug:
+	@$(MAKE) bench-targets B=$(BD) CFLAGS="$(CFLAGS) $(BASE_CFLAGS) $(DEPEND_CFLAGS)" \
+	  OPTIMIZE="$(DEBUG_CFLAGS)" OPTIMIZEVM="$(DEBUG_CFLAGS)" \
+	  SERVER_CFLAGS="$(SERVER_CFLAGS)" V=$(V)
+
+bench-targets: bench-makedirs $(B)/$(BENCHBIN)$(FULLBINEXT)
+	@echo ""
+	@echo "Memtest build: $(B)/$(BENCHBIN)$(FULLBINEXT)"
+	@echo ""
+
+bench-makedirs:
+	@if [ ! -d $(BUILD_DIR) ]; then $(MKDIR) $(BUILD_DIR); fi
+	@if [ ! -d $(B) ]; then $(MKDIR) $(B); fi
+	@if [ ! -d $(B)/bench ]; then $(MKDIR) $(B)/bench; fi
+
+
+#############################################################################
 ## BASEQ3 CGAME
 #############################################################################
 

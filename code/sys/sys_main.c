@@ -594,8 +594,11 @@ void Sys_SigHandler( int signal )
 /*
 =================
 main
+Not compiled when MEMTEST_BUILD is defined; sys_bench.c provides
+its own main() for the benchmark harness in that case.
 =================
 */
+#ifndef MEMTEST_BUILD
 int main( int argc, char **argv )
 {
 	int   i;
@@ -676,4 +679,5 @@ int main( int argc, char **argv )
 
 	return 0;
 }
+#endif /* MEMTEST_BUILD */
 
