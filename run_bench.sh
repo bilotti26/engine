@@ -180,6 +180,7 @@ CMD="\"$BENCH_BIN\" \
     +set fs_basepath \"$DATA_DIR\" \
     +set fs_homepath \"$DATA_DIR\" \
     +set vm_game 0 \
+    +set sv_fps 60 \
     +set g_gametype 0 \
     +set bot_enable 1 \
     +set bot_nochat 1 \

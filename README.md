@@ -158,6 +158,41 @@ BENCH: hunk_remaining = 111457856 bytes (~106 MB free)
 
 ---
 
+## How Much Did We Build vs. The Game?
+
+Short answer: we wrote ~5% of the code. The game engine does all the heavy lifting.
+
+### What We Built (~550 lines)
+
+| File | Lines | What it does |
+|---|---|---|
+| `code/sys/sys_bench.c` | ~120 | Benchmark harness — `main()`, frame counter, `--bench-frames` arg, hunk stats printout |
+| `code/null/null_net_ip.c` | ~150 | Null network backend — stubs out all sockets |
+| `bench_config/baseoa/autoexec.cfg` | ~12 | Server config |
+| `run_bench.sh` | ~200 | Download script + launch wrapper |
+| Makefile additions | ~60 | `memtest` build target |
+| `q_platform.h` patch | 3 | Apple Silicon (aarch64) support |
+| `sys_main.c` patch | 2 | `#ifndef MEMTEST_BUILD` guard |
+
+### What's the Actual Game (~95%)
+
+Everything that makes the benchmark *interesting* was already there:
+
+- **Bot AI** — thousands of lines of pathfinding, decision trees, weapon selection, enemy tracking
+- **AAS navigation** — area awareness system, A* graph traversal over the BSP map
+- **QVM interpreter** — the entire bytecode VM running `qagame.qvm` every frame
+- **BSP collision** — trace queries, spatial subdivision, physics
+- **Hunk allocator** — the memory subsystem we're actually benchmarking
+- **Server game loop** — `Com_Frame()`, `SV_Frame()`, entity updates, scoring
+
+### The Analogy
+
+Think of it like a jet engine on a test stand. OpenArena is the jet engine — we built the test stand, the fuel line, and the instruments. The engine does all the real work.
+
+The clever part is what we *removed* — stripping SDL, OpenGL, OpenAL, and the network stack without breaking the simulation core. That's what makes it portable to seL4.
+
+---
+
 ## Project Structure
 
 ```
