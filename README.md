@@ -114,12 +114,12 @@ Kill: 1 0 8: Grism killed Gargoyle by MOD_PLASMA
 
 === OpenArena Memory Benchmark Results ===
 BENCH: frames         = 500
-BENCH: elapsed_ms     = 25351
-BENCH: fps_equivalent = 19.7
+BENCH: elapsed_ms     = 8288
+BENCH: fps_equivalent = 60.3
 BENCH: hunk_remaining = 111457856 bytes (~106 MB free)
 ```
 
-**Summary:** 500 frames of full bot AI, BSP collision, and QVM execution in 25.4 seconds. Hunk allocator stable — no allocations during the game loop, all memory committed at map load.
+**Summary:** 500 frames of full bot AI, BSP collision, and QVM execution in 8.3 seconds at 60 fps. Hunk allocator stable — no allocations during the game loop, all memory committed at map load.
 
 ---
 
@@ -139,23 +139,22 @@ Loading 1590 jump table targets
 qagame loaded in 6649120 bytes on the hunk
 AAS initialized. 34 level items found.
 
-Kill: 1 0 18: Grism killed Gargoyle by MOD_TELEFRAG
-Kill: 6 7  3: Sarge killed Grunt by MOD_MACHINEGUN
-Kill: 4 5  4: Merman killed Sergei by MOD_GRENADE
-Kill: 6 5  1: Sarge killed Sergei by MOD_SHOTGUN    [Award: EXCELLENT]
-Kill: 6 3  1: Sarge killed Major by MOD_SHOTGUN     [Award: EXCELLENT]
-Kill: 7 6  6: Grunt killed Sarge by MOD_ROCKET
-Kill: 2 5 18: Kyonshi killed Sergei by MOD_TELEFRAG
+Kill: 5 3 3: Sergei killed Major by MOD_MACHINEGUN
+Kill: 0 1 6: Gargoyle killed Grism by MOD_ROCKET
+Kill: 4 0 3: Merman killed Gargoyle by MOD_MACHINEGUN
+Kill: 6 4 4: Sarge killed Merman by MOD_GRENADE
+Kill: 7 6 1: Grunt killed Sarge by MOD_SHOTGUN      [Award: EXCELLENT]
+Kill: 5 3 8: Sergei killed Major by MOD_PLASMA
 ...
 
 === OpenArena Memory Benchmark Results ===
 BENCH: frames         = 1000
-BENCH: elapsed_ms     = 50251
-BENCH: fps_equivalent = 19.9
+BENCH: elapsed_ms     = 16337
+BENCH: fps_equivalent = 61.2
 BENCH: hunk_remaining = 111457856 bytes (~106 MB free)
 ```
 
-**Summary:** 1000 frames, 8 bots running full AI simultaneously. Sarge earned two EXCELLENT awards before getting rocket-fragged by Grunt. Hunk footprint identical to the 4-bot run — confirming bot count affects CPU/QVM load, not peak memory. Total hunk committed: ~120 MB at map load, ~106 MB still free.
+**Summary:** 1000 frames, 8 bots running full AI simultaneously at 61 fps. Grunt earned an EXCELLENT award. Hunk footprint identical to the 4-bot run — confirming bot count affects CPU/QVM load, not peak memory. Total hunk committed: ~120 MB at map load, ~106 MB still free.
 
 ---
 
