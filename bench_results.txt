@@ -1,0 +1,29 @@
+
+=== OpenArena seL4 Memory Benchmark ===
+  Binary  : /Users/abilotti/Documents/SEL4 test/openarena/build/release-darwin-arm/oa_bench.arm
+  Map     : oa_dm6
+  Frames  : 1000
+  Bots    : 4 (skill 3)
+
+--- Game data already present at /Users/abilotti/Documents/SEL4 test/openarena/gamedata/baseoa ---
+
+--- Installing benchmark config ---
+  Config  : /Users/abilotti/Documents/SEL4 test/openarena/gamedata/baseoa/autoexec.cfg
+
+--- Launching benchmark ---
+
+Command:
+  "/Users/abilotti/Documents/SEL4 test/openarena/build/release-darwin-arm/oa_bench.arm"     +set dedicated 1     +set fs_basepath "/Users/abilotti/Documents/SEL4 test/openarena/gamedata"     +set fs_homepath "/Users/abilotti/Documents/SEL4 test/openarena/gamedata"     +set vm_game 0     +set g_gametype 0     +set bot_enable 1     +set bot_nochat 1     +set g_forcerespawn 1     +set fraglimit 0     +set timelimit 0     +map oa_dm6      +addbot Gargoyle 3 +addbot Grism 3 +addbot Kyonshi 3 +addbot Major 3     --bench-frames 1000
+
+] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] ] === OpenArena Memory Benchmark ===
+BENCH: target frames = 1000
+BENCH: initialising engine...
+BENCH: running 1000 frames...
+
+=== OpenArena Memory Benchmark Results ===
+BENCH: frames=1000 elapsed_ms=50251
+BENCH: fps_equivalent=19.9
+BENCH: hunk_remaining=111457856 bytes
+
+--- Hunk allocation log ---
+==========================================
