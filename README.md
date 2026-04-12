@@ -25,7 +25,7 @@ By removing SDL, OpenGL, OpenAL, and the network stack, we get all of that memor
 | `code/null/null_net_ip.c` | New file — socket-free network backend. `NET_GetPacket` always returns false, `NET_Sleep` is a no-op (placeholder for `seL4_Yield()`). |
 | `code/sys/sys_bench.c` | New file — benchmark harness `main()`. Parses `--bench-frames N`, drives the `Com_Frame()` loop, prints hunk stats on exit. |
 | `code/sys/sys_main.c` | Original `main()` guarded with `#ifndef MEMTEST_BUILD` so both builds share all helper functions. |
-| `code/qcommon/q_platform.h` | Added Apple Silicon (`aarch64`) to the macOS platform block. |
+| `code/qcommon/q_platform.h` | Added `aarch64` to the macOS platform block (needed for seL4 cross-compile target). |
 | `Makefile` | Added `memtest` and `memtest-debug` targets producing `oa_bench`. Uses `-DNO_VM_COMPILED` to force QVM bytecode interpreter (no JIT, portable to any arch). |
 | `bench_config/baseoa/autoexec.cfg` | Server config loaded automatically — sets FFA gametype, disables master servers and timelimit. |
 
@@ -101,8 +101,8 @@ Build with `-DMEMTEST_SEL4` to activate the seL4-targeted stubs in `null_net_ip.
 
 ## Benchmark Results
 
-All runs on Apple M-series (aarch64, macOS), map `oa_dm6`, skill level 3, release build.
-Binary size: ~873 KB. No GPU, no display server, no network sockets.
+All native runs on Linux x86_64 (Intel Core Haswell, 4 vCPUs), map `oa_dm6`, skill level 3, release build.
+Binary: `build/release-linux-x86_64/oa_bench.x86_64`. No GPU, no display server, no network sockets.
 
 ---
 
@@ -112,7 +112,7 @@ Binary size: ~873 KB. No GPU, no display server, no network sockets.
 $ ./run_bench.sh --frames 500 --bots 4
 
 === OpenArena seL4 Memory Benchmark ===
-  Binary  : build/release-darwin-arm/oa_bench.arm
+  Binary  : build/release-linux-x86_64/oa_bench.x86_64
   Map     : oa_dm6
   Frames  : 500
   Bots    : 4 (skill 3)
@@ -122,18 +122,16 @@ Loading 1590 jump table targets
 qagame loaded in 6649120 bytes on the hunk
 AAS initialized. 34 level items found.
 
-Kill: 2 0 6: Kyonshi killed Gargoyle by MOD_ROCKET
-Kill: 2 3 7: Kyonshi killed Major by MOD_ROCKET_SPLASH
-Kill: 1 0 8: Grism killed Gargoyle by MOD_PLASMA
+Kill: 1 3 8: Grism killed Major by MOD_PLASMA
+Kill: 0 1 3: Gargoyle killed Grism by MOD_MACHINEGUN
 
 === OpenArena Memory Benchmark Results ===
-BENCH: frames         = 500
-BENCH: elapsed_ms     = 8288
-BENCH: fps_equivalent = 60.3
-BENCH: hunk_remaining = 111457856 bytes (~106 MB free)
+BENCH: frames=500 elapsed_ms=8240
+BENCH: fps_equivalent=60.7
+BENCH: hunk_remaining=111457824 bytes (~106 MB free)
 ```
 
-**Summary:** 500 frames of full bot AI, BSP collision, and QVM execution in 8.3 seconds at 60 fps. Hunk allocator stable — no allocations during the game loop, all memory committed at map load.
+**Summary:** 500 frames of full bot AI, BSP collision, and QVM execution in 8.2 seconds at 60 fps. Hunk allocator stable — no allocations during the game loop, all memory committed at map load.
 
 ---
 
@@ -143,7 +141,7 @@ BENCH: hunk_remaining = 111457856 bytes (~106 MB free)
 $ ./run_bench.sh --frames 1000 --bots 8
 
 === OpenArena seL4 Memory Benchmark ===
-  Binary  : build/release-darwin-arm/oa_bench.arm
+  Binary  : build/release-linux-x86_64/oa_bench.x86_64
   Map     : oa_dm6
   Frames  : 1000
   Bots    : 8 (skill 3)
@@ -153,22 +151,19 @@ Loading 1590 jump table targets
 qagame loaded in 6649120 bytes on the hunk
 AAS initialized. 34 level items found.
 
-Kill: 5 3 3: Sergei killed Major by MOD_MACHINEGUN
-Kill: 0 1 6: Gargoyle killed Grism by MOD_ROCKET
-Kill: 4 0 3: Merman killed Gargoyle by MOD_MACHINEGUN
-Kill: 6 4 4: Sarge killed Merman by MOD_GRENADE
-Kill: 7 6 1: Grunt killed Sarge by MOD_SHOTGUN      [Award: EXCELLENT]
-Kill: 5 3 8: Sergei killed Major by MOD_PLASMA
+Kill: 2 0 4: Kyonshi killed Gargoyle by MOD_GRENADE
+Kill: 5 1 8: Sergei killed Grism by MOD_PLASMA
+Kill: 6 3 11: Sarge killed Major by MOD_LIGHTNING
+Kill: 7 2 1: Grunt killed Kyonshi by MOD_SHOTGUN
 ...
 
 === OpenArena Memory Benchmark Results ===
-BENCH: frames         = 1000
-BENCH: elapsed_ms     = 16337
-BENCH: fps_equivalent = 61.2
-BENCH: hunk_remaining = 111457856 bytes (~106 MB free)
+BENCH: frames=1000 elapsed_ms=16321
+BENCH: fps_equivalent=61.3
+BENCH: hunk_remaining=111457824 bytes (~106 MB free)
 ```
 
-**Summary:** 1000 frames, 8 bots running full AI simultaneously at 61 fps. Grunt earned an EXCELLENT award. Hunk footprint identical to the 4-bot run — confirming bot count affects CPU/QVM load, not peak memory. Total hunk committed: ~120 MB at map load, ~106 MB still free.
+**Summary:** 1000 frames, 8 bots running full AI simultaneously at 61 fps. Hunk footprint identical to the 4-bot run — confirming bot count affects CPU/QVM load, not peak memory. Total hunk committed: ~120 MB at map load, ~106 MB still free.
 
 ---
 
@@ -216,8 +211,8 @@ BENCH: done. Halting.
 
 | Environment | Platform | Frames | Bots | Elapsed | fps equivalent |
 |---|---|---|---|---|---|
-| Native (macOS) | Apple M-series, aarch64 | 500 | 4 | 8.3 s | **60.3** |
-| Native (macOS) | Apple M-series, aarch64 | 1000 | 8 | 16.3 s | **61.2** |
+| Native (Linux) | Intel Haswell, x86_64 | 500 | 4 | 8.2 s | **60.7** |
+| Native (Linux) | Intel Haswell, x86_64 | 1000 | 8 | 16.3 s | **61.3** |
 | seL4 / QEMU TCG | cortex-a53, software emulation | 200 | 4 | 11.8 s | **16.9** |
 
 The native runs are clock-limited at exactly 60 fps — the engine is idle between frames because it runs faster than the simulated tick rate. The seL4/QEMU run is genuinely CPU-bound (TCG emulation can't keep up with 60 fps wall-clock pacing). Both environments reach the same hunk watermark, confirming the seL4 port is a correct, complete execution of the game simulation — not a degraded or partial run.
@@ -237,7 +232,7 @@ Short answer: we wrote ~5% of the code. The game engine does all the heavy lifti
 | `bench_config/baseoa/autoexec.cfg` | ~12 | Server config |
 | `run_bench.sh` | ~200 | Download script + launch wrapper |
 | Makefile additions | ~60 | `memtest` build target |
-| `q_platform.h` patch | 3 | Apple Silicon (aarch64) support |
+| `q_platform.h` patch | 3 | aarch64 platform support (for seL4 cross-compile) |
 | `sys_main.c` patch | 2 | `#ifndef MEMTEST_BUILD` guard |
 
 ### What's the Actual Game (~95%)
