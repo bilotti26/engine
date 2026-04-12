@@ -18,20 +18,20 @@ seL4 porting notes:
 #include "../qcommon/qcommon.h"
 
 /* fd_set is used only as a pass-through parameter; our implementations
-   never touch the value.  Include the POSIX header on normal systems,
-   or provide a dummy typedef when targeting seL4 (which has no select). */
-#ifndef MEMTEST_SEL4
-#  ifdef _WIN32
-#    include <winsock2.h>
-#  else
-#    include <sys/select.h>
-#    include <arpa/inet.h>   /* ntohs */
-#  endif
-#else
-/* seL4 target: fd_set and ntohs are not available; provide stubs. */
+   never touch the value.  Include the POSIX header on normal systems.
+   When targeting seL4 with a bare-metal toolchain that lacks these headers,
+   set MEMTEST_SEL4_NOPOSIX to get stubs instead. */
+#ifdef _WIN32
+#  include <winsock2.h>
+#elif defined(MEMTEST_SEL4_NOPOSIX)
+/* Truly headerless seL4 toolchain: provide minimal stubs */
 typedef int fd_set;
 static inline unsigned short ntohs_stub( unsigned short x ) { return x; }
 #  define ntohs ntohs_stub
+#else
+/* Linux cross-compiler (aarch64-linux-gnu) or native Linux: use real headers */
+#  include <sys/select.h>
+#  include <arpa/inet.h>   /* ntohs */
 #endif
 
 /* -----------------------------------------------------------------------

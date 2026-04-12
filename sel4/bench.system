@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  bench.system: seL4 Microkit system description for the OA memory benchmark.
+  Single protection domain running the headless game server.
+  Memory layout (QEMU virt aarch64, 2 GB RAM starting at 0x40000000):
+    seL4 kernel:  physical 0x60000000+ (avail_p_regs = [0x60000000, 0xc0000000))
+    Microkit loader: physical 0x70000000 (transient, freed after boot)
+    Engine heap:  physical 0x80000000, size 192 MB, mapped with 2 MB large pages
+    Engine stack: 2 MB (Microkit stack_size), near top of 48-bit VA space
+-->
+<system>
+    <!-- 192 MB engine heap from 0x80000000 to 0x8bffffff, mapped with 2 MB large pages
+         (128 MB hunk + 4 MB zone + ~60 MB headroom) -->
+    <memory_region name="heap" size="0xC000000" phys_addr="0x80000000" page_size="0x200000" />
+
+    <protection_domain name="bench" priority="254" pp="true" stack_size="0x200000">
+        <program_image path="bench.elf" />
+        <map mr="heap" vaddr="0x80000000" perms="rw" cached="true"
+             setvar_vaddr="sel4_heap_base" />
+    </protection_domain>
+</system>

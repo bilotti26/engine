@@ -127,9 +127,10 @@ static int Bench_ParseArgs( int argc, char **argv,
 }
 
 /* -----------------------------------------------------------------------
-   main
+   main  (Linux/macOS build only -- not used in the seL4 Microkit build)
    ----------------------------------------------------------------------- */
 
+#ifndef MEMTEST_SEL4
 int main( int argc, char **argv )
 {
 	char commandLine[MAX_STRING_CHARS] = { 0 };
@@ -175,5 +176,80 @@ int main( int argc, char **argv )
 	CON_Shutdown();
 	return 0;
 }
+#endif /* !MEMTEST_SEL4 */
+
+/* -----------------------------------------------------------------------
+   seL4 / Microkit entry point
+
+   Called from sel4/src/entry.c after the heap and timer are initialised.
+   Runs the same benchmark loop as main() but:
+     - command line is hardcoded (no argv)
+     - no signal() setup (seL4 uses fault endpoints)
+     - no CON_Init/CON_Shutdown (no interactive console)
+     - +set fs_basepath /gamedata points into the embedded CPIO filesystem
+
+   Compile with -DMEMTEST_SEL4 (implies -DMEMTEST_BUILD).
+   ----------------------------------------------------------------------- */
+#ifdef MEMTEST_SEL4
+
+void bench_sel4_main( void )
+{
+	int t_start, t_end;
+
+	/* Hardcoded command line: same flags run_bench.sh passes on Linux.
+	 * Must be a mutable array, not a const pointer: Com_ParseCommandLine
+	 * writes null terminators in-place to split tokens. */
+	static char commandLine[] =
+		"+set dedicated 1 "
+		"+set fs_basepath /gamedata "
+		"+set fs_homepath /gamedata "
+		"+set vm_game 0 "
+		"+set sv_fps 60 "
+		"+set g_gametype 0 "
+		"+set bot_enable 1 "
+		"+set bot_nochat 1 "
+		"+set g_forcerespawn 1 "
+		"+set fraglimit 0 "
+		"+set timelimit 0 "
+		"+map oa_dm6 "
+		"+addbot Gargoyle 3 "
+		"+addbot Grism 3 "
+		"+addbot Kyonshi 3 "
+		"+addbot Major 3";
+
+	bench_frames = 1000;   /* override via BENCH_FRAMES define if desired */
+#ifdef BENCH_FRAMES
+	bench_frames = BENCH_FRAMES;
+#endif
+
+	printf( "=== OpenArena seL4 Memory Benchmark ===\n" );
+	printf( "BENCH: target frames = %d\n", bench_frames );
+	printf( "BENCH: initialising engine...\n" );
+
+	Com_Init( (char *)commandLine );
+	NET_Init();
+
+	/* No signal() or CON_Init() on seL4 */
+
+	printf( "BENCH: running %d frames...\n", bench_frames );
+	t_start = Sys_Milliseconds();
+
+	while ( !bench_done )
+	{
+		IN_Frame( qfalse );
+		Com_Frame();
+		Bench_Frame();
+	}
+
+	t_end = Sys_Milliseconds();
+
+	Bench_PrintResults( t_end - t_start );
+
+	/* Spin forever -- Microkit PD must not return from init() */
+	printf( "BENCH: done. Halting.\n" );
+	while (1) {}
+}
+
+#endif /* MEMTEST_SEL4 */
 
 #endif /* MEMTEST_BUILD */
