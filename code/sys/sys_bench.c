@@ -192,6 +192,96 @@ int main( int argc, char **argv )
    ----------------------------------------------------------------------- */
 #ifdef MEMTEST_SEL4
 
+/* -----------------------------------------------------------------------
+   Snapshot writing — seL4 multi-PD cheat detection
+   Fills game_snapshot_t from current server state, issues a release
+   barrier, then notifies both detector PDs via Microkit channels.
+   ----------------------------------------------------------------------- */
+#include <microkit.h>
+#include <game_snapshot.h>
+#include "../server/server.h"
+
+/* Patched by Microkit (setvar_vaddr in bench.system) */
+extern uintptr_t sel4_snapshot;
+
+/* Channel IDs for the bench PD (match bench.system <end pd="bench" id=N>) */
+#define BENCH_CH_AIM      1
+#define BENCH_CH_PHYSICS  2
+
+static void Bench_WriteSnapshot( unsigned int frame_num )
+{
+	game_snapshot_t *snap;
+	int i, n;
+
+	if ( !sel4_snapshot )
+		return;
+
+	/* Server hasn't called VM_Call(GAME_INIT) yet — no client state */
+	if ( !sv.gameClients )
+		return;
+
+	snap = (game_snapshot_t *)sel4_snapshot;
+
+	n = sv_maxclients ? sv_maxclients->integer : 0;
+	if ( n > SNAP_MAX_CLIENTS )
+		n = SNAP_MAX_CLIENTS;
+
+	snap->frame_num   = frame_num;
+	snap->frame_msec  = ( sv_fps && sv_fps->integer > 0 )
+	                    ? (unsigned int)( 1000 / sv_fps->integer )
+	                    : 16u;
+	snap->num_clients = (unsigned int)n;
+	snap->_pad        = 0u;
+
+	for ( i = 0; i < n; i++ )
+	{
+		client_t      *cl = &svs.clients[i];
+		snap_client_t *sc = &snap->clients[i];
+		playerState_t *ps;
+
+		if ( cl->state < CS_ACTIVE )
+		{
+			sc->alive = 0;
+			continue;
+		}
+
+		ps = SV_GameClientNum( i );
+		sc->origin[0]     = ps->origin[0];
+		sc->origin[1]     = ps->origin[1];
+		sc->origin[2]     = ps->origin[2];
+		sc->velocity[0]   = ps->velocity[0];
+		sc->velocity[1]   = ps->velocity[1];
+		sc->velocity[2]   = ps->velocity[2];
+		sc->viewangles[0] = ps->viewangles[0];
+		sc->viewangles[1] = ps->viewangles[1];
+		sc->viewangles[2] = ps->viewangles[2];
+		sc->weapon        = ps->weapon;
+		sc->pm_flags      = ps->pm_flags;
+		sc->event[0]      = ps->events[0];
+		sc->event[1]      = ps->events[1];
+		sc->event_parm[0] = ps->eventParms[0];
+		sc->event_parm[1] = ps->eventParms[1];
+		sc->alive         = 1u;
+	}
+
+	/* Zero any inactive slots beyond active count */
+	for ( i = n; i < SNAP_MAX_CLIENTS; i++ )
+		snap->clients[i].alive = 0u;
+
+	/* Visibility mask: not yet computed from BSP (future work) */
+	for ( i = 0; i < SNAP_MAX_CLIENTS; i++ )
+		snap->vis_mask[i] = 0u;
+
+	/*
+	 * Release barrier: guarantee all snapshot stores are globally visible
+	 * before the seL4_Signal() fires.  aarch64 emits a single DMB ISH.
+	 */
+	__atomic_thread_fence( __ATOMIC_RELEASE );
+
+	microkit_notify( BENCH_CH_AIM );
+	microkit_notify( BENCH_CH_PHYSICS );
+}
+
 void bench_sel4_main( void )
 {
 	int t_start, t_end;
@@ -238,6 +328,7 @@ void bench_sel4_main( void )
 	{
 		IN_Frame( qfalse );
 		Com_Frame();
+		Bench_WriteSnapshot( (unsigned int)bench_frame_cur );
 		Bench_Frame();
 	}
 

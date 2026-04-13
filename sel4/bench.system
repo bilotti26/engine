@@ -1,21 +1,71 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  bench.system: seL4 Microkit system description for the OA memory benchmark.
-  Single protection domain running the headless game server.
-  Memory layout (QEMU virt aarch64, 2 GB RAM starting at 0x40000000):
-    seL4 kernel:  physical 0x60000000+ (avail_p_regs = [0x60000000, 0xc0000000))
-    Microkit loader: physical 0x70000000 (transient, freed after boot)
-    Engine heap:  physical 0x80000000, size 192 MB, mapped with 2 MB large pages
-    Engine stack: 2 MB (Microkit stack_size), near top of 48-bit VA space
+  bench.system: seL4 Microkit system description for the OA cheat-detection demo.
+
+  Three protection domains:
+    bench           (priority 100) — headless game engine, writes snapshot
+    monitor_aim     (priority 200) — aimbot detector, read-only snapshot
+    monitor_physics (priority 150) — speedhack/noclip detector, read-only snapshot
+
+  Physical memory (QEMU virt aarch64, 2 GB RAM at 0x40000000):
+    seL4 kernel:     physical 0x60000000+  (avail_p_regs = [0x60000000, 0xc0000000))
+    Microkit loader: physical 0x70000000   (transient, freed after boot)
+    Engine heap:     physical 0x80000000, size 192 MB (2 MB large pages)
+                       ends at 0x8BFFFFFF
+    Snapshot page:   physical 0x8C000000, size 4 KB (standard page)
+                       bench: rw   monitor PDs: r
 -->
 <system>
-    <!-- 192 MB engine heap from 0x80000000 to 0x8bffffff, mapped with 2 MB large pages
-         (128 MB hunk + 4 MB zone + ~60 MB headroom) -->
+    <!-- 192 MB engine heap: 128 MB hunk + 4 MB zone + ~60 MB headroom -->
     <memory_region name="heap" size="0xC000000" phys_addr="0x80000000" page_size="0x200000" />
 
-    <protection_domain name="bench" priority="254" pp="true" stack_size="0x200000">
+    <!-- 4 KB snapshot page immediately after heap.
+         bench maps rw; detectors map r (enforced at hardware page-table level). -->
+    <memory_region name="snapshot" size="0x1000" phys_addr="0x8C000000" />
+
+    <!-- ================================================================
+         Engine PD: runs SV_Frame loop, writes snapshot, notifies detectors.
+         Priority 100 (below both detectors) so that when bench signals a
+         detector the detector immediately preempts bench, runs notified(),
+         then returns — bench resumes after.
+         ================================================================ -->
+    <protection_domain name="bench" priority="100" pp="true" stack_size="0x200000">
         <program_image path="bench.elf" />
-        <map mr="heap" vaddr="0x80000000" perms="rw" cached="true"
+        <map mr="heap"     vaddr="0x80000000" perms="rw" cached="true"
              setvar_vaddr="sel4_heap_base" />
+        <map mr="snapshot" vaddr="0x8C000000" perms="rw" cached="true"
+             setvar_vaddr="sel4_snapshot" />
     </protection_domain>
+
+    <!-- ================================================================
+         Aimbot detector PD: priority 200 > bench (100), so it immediately
+         preempts bench upon notification and runs notified() synchronously.
+         ================================================================ -->
+    <protection_domain name="monitor_aim" priority="200" stack_size="0x10000">
+        <program_image path="monitor.elf" />
+        <map mr="snapshot" vaddr="0x8C000000" perms="r" cached="true"
+             setvar_vaddr="sel4_snapshot" />
+    </protection_domain>
+
+    <!-- ================================================================
+         Speedhack/noclip detector PD: priority 150, between bench and aim
+         detector.  Runs after monitor_aim completes.
+         ================================================================ -->
+    <protection_domain name="monitor_physics" priority="150" stack_size="0x10000">
+        <program_image path="physics.elf" />
+        <map mr="snapshot" vaddr="0x8C000000" perms="r" cached="true"
+             setvar_vaddr="sel4_snapshot" />
+    </protection_domain>
+
+    <!-- bench(ch=1) <-> monitor_aim(ch=1)     : per-frame notify -->
+    <channel>
+        <end pd="bench"       id="1" />
+        <end pd="monitor_aim" id="1" />
+    </channel>
+
+    <!-- bench(ch=2) <-> monitor_physics(ch=1) : per-frame notify -->
+    <channel>
+        <end pd="bench"           id="2" />
+        <end pd="monitor_physics" id="1" />
+    </channel>
 </system>

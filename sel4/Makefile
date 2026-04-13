@@ -92,6 +92,22 @@ LDFLAGS := \
 LIBS := -lmicrokit
 
 # ---------------------------------------------------------------------------
+# Compiler flags for the minimal detector PDs (no engine headers / defines)
+# ---------------------------------------------------------------------------
+DET_CFLAGS := \
+  -mcpu=$(CPU) \
+  -nostdlib \
+  -ffreestanding \
+  -fno-stack-protector \
+  -fno-builtin \
+  -O2 \
+  -g \
+  -Wall \
+  -Wno-unused-function \
+  -I$(BOARD_DIR)/include \
+  -I$(CURDIR)/include
+
+# ---------------------------------------------------------------------------
 # Source files
 # ---------------------------------------------------------------------------
 # seL4 platform sources
@@ -177,9 +193,14 @@ OBJS := $(call _OBJ_FROM_SRC,$(ALL_SRCS)) \
 # ---------------------------------------------------------------------------
 # Targets
 # ---------------------------------------------------------------------------
-IMAGE_FILE  := $(BUILD_DIR)/loader.img
-REPORT_FILE := $(BUILD_DIR)/report.txt
-ELF_FILE    := $(BUILD_DIR)/bench.elf
+IMAGE_FILE   := $(BUILD_DIR)/loader.img
+REPORT_FILE  := $(BUILD_DIR)/report.txt
+ELF_FILE     := $(BUILD_DIR)/bench.elf
+MONITOR_ELF  := $(BUILD_DIR)/monitor.elf
+PHYSICS_ELF  := $(BUILD_DIR)/physics.elf
+
+MONITOR_OBJ  := $(BUILD_DIR)/sel4/src/monitor.o
+PHYSICS_OBJ  := $(BUILD_DIR)/sel4/src/physics.o
 
 .PHONY: all clean
 
@@ -203,12 +224,28 @@ $(BUILD_DIR)/sel4/%.o: $(CURDIR)/%.c | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-# Link the PD ELF
+# Link the main engine PD ELF
 $(ELF_FILE): $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-# Package with the Microkit tool
-$(IMAGE_FILE) $(REPORT_FILE): $(ELF_FILE) $(CURDIR)/bench.system
+# Compile detector PD sources with minimal flags (no engine defines)
+$(MONITOR_OBJ): $(CURDIR)/src/monitor.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(CC) -c $(DET_CFLAGS) -o $@ $<
+
+$(PHYSICS_OBJ): $(CURDIR)/src/physics.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(CC) -c $(DET_CFLAGS) -o $@ $<
+
+# Link detector PD ELFs (minimal: just libmicrokit)
+$(MONITOR_ELF): $(MONITOR_OBJ)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+$(PHYSICS_ELF): $(PHYSICS_OBJ)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+# Package all three PD ELFs with the Microkit tool
+$(IMAGE_FILE) $(REPORT_FILE): $(ELF_FILE) $(MONITOR_ELF) $(PHYSICS_ELF) $(CURDIR)/bench.system
 	$(MICROKIT_TOOL) $(CURDIR)/bench.system \
 	  --search-path $(BUILD_DIR) \
 	  --board $(MICROKIT_BOARD) \
@@ -219,7 +256,7 @@ $(IMAGE_FILE) $(REPORT_FILE): $(ELF_FILE) $(CURDIR)/bench.system
 	@echo "seL4 image: $(IMAGE_FILE)"
 
 $(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)/engine $(BUILD_DIR)/sel4
+	mkdir -p $(BUILD_DIR)/engine $(BUILD_DIR)/sel4 $(BUILD_DIR)/sel4/src
 
 clean:
 	rm -rf $(BUILD_DIR)
