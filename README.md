@@ -372,3 +372,60 @@ The clever part is what we *removed* — stripping SDL, OpenGL, OpenAL, and the 
 ## License
 
 OpenArena engine code is licensed under the GNU GPL v2. All modifications in this repository are likewise GPL v2. Game data (downloaded separately by `run_bench.sh`) is licensed under CC-BY-SA.
+
+---
+
+## Research Proposal
+
+### Capability-Based Cheat Detection in OpenArena Using Secure Partitioning through the seL4 Kernel
+
+I propose to design, implement, and evaluate a capability-based secure architecture for cheat detection in online games by integrating a test game, OpenArena, into a seL4 kernel based system and comparing it to previous work with secure enclaves and the BGAS architecture. I will first get seL4 running in either simulation or on bare metal and then modify OpenArena to be able to properly run in seL4 with distinct memory compartments such as player data, aimbot detection, and game data. Next, I will develop natural test cases that force interactions between these compartments such as player input or aimbot detection calls and implement the necessary capability creation and transfer mechanisms in seL4. After this system is created, I will benchmark the system in areas such as memory footprint, performance, and security isolation properties relative to a non-partitioned standard linux kernel OpenArena baseline. The end result will be a publishable case study demonstrating a concrete and experimentally evaluated design for secure, cheat-resistant game architectures, building off previous work from MIDN Joe Oester and MIDN Raymond Tong. This case study will be publishable to journals such as IEEE Transactions on Games or computer security journals.
+
+---
+
+## Proposal Gap Analysis
+
+Honest assessment of where the project currently stands against each goal.
+
+### What Is Met
+
+| Proposal Goal | Status | Evidence |
+|---|---|---|
+| Get seL4 running in simulation or bare metal | **Met** | QEMU virt aarch64, Microkit v1.4.1, boots and runs |
+| Modify OpenArena to run in seL4 | **Met** | Full headless server — bot AI, BSP, QVM — on bare seL4 |
+| Distinct memory compartments | **Partially met** | 3 PDs exist; see gap below on compartment granularity |
+| Aimbot detection compartment | **Met** | `monitor_aim` PD, per-frame yaw velocity detection |
+| Physics/speedhack detection compartment | **Met** | `monitor_physics` PD, velocity and teleport detection |
+| Interactions between compartments | **Met** | Per-frame `game_snapshot_t` over shared MR, Microkit channels |
+| Capability creation and transfer mechanisms | **Partially met** | Microkit pre-assigned caps and channels work; no dynamic cap transfer |
+| Benchmark: memory footprint | **Met** | `hunk_remaining` measured, identical across all environments |
+| Benchmark: performance | **Met** | fps_equivalent, elapsed_ms, 4-row comparison table |
+| Benchmark: security isolation properties | **Partially met** | Read-only enforcement described qualitatively; not formally evaluated |
+| Comparison to non-partitioned Linux baseline | **Met** | Native Linux x86_64 results in README |
+
+### Gaps — What Isn't Done Yet
+
+**1. "Player data" as a separate compartment**
+The proposal lists three compartments: player data, aimbot detection, game data. Currently the engine PD holds all three — game data, player state, and the logic that updates them are all in one `bench` PD. The `game_snapshot_t` is a copy pushed out to detectors, not a capability-controlled live region. A truer design would isolate `playerState_t` into its own PD and grant the engine only read access during the game tick.
+
+**2. No comparison to secure enclaves or BGAS architecture**
+The proposal explicitly requires comparison to "previous work with secure enclaves and the BGAS architecture." This comparison is entirely absent. A related-work section measuring or arguing against those alternatives on the same axes (isolation strength, performance overhead, complexity) is needed.
+
+**3. No reference to or build on MIDN Oester / MIDN Tong's work**
+The proposal says this builds off their prior work. That prior work isn't cited, summarized, or differentiated from anywhere in the codebase or README.
+
+**4. Dynamic capability transfer is not demonstrated**
+Microkit pre-assigns all capabilities at build time via the system XML. The proposal says "implement the necessary capability creation and transfer mechanisms" — seL4's native capability model supports runtime minting and delegation, which is stronger than the fixed Microkit channel model. The current design doesn't exercise that.
+
+**5. Security isolation is only described, not evaluated**
+The README says the kernel enforces read-only access at the page-table level, but there's no adversarial test — no experiment where a detector PD tries to write the snapshot and confirms a fault, no measurement of what a compromised PD can observe about other PDs' memory. A reviewer will ask for this.
+
+**6. "Player input" as a test case is missing**
+The proposal lists player input as a natural cross-compartment interaction. The current setup uses bots (no real input path), which avoids the interesting case of an input compartment forwarding commands to the game logic under capability control.
+
+### Recommended Next Steps for Publishability
+
+1. Write the BGAS/enclave comparison — even a qualitative threat model table gets you far
+2. Add an adversarial fault test — try to write the read-only MR from a detector PD, show the seL4 fault
+3. Cite and differentiate from Oester/Tong's prior work
+4. Split player state into its own compartment to match the proposed architecture exactly
