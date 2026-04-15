@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  bench_attack.system: seL4 Microkit system description for the OA read-only
+  enforcement test.
+
+  Four protection domains:
+    bench           (priority 100) — headless game engine, writes snapshot
+    monitor_aim     (priority 200) — aimbot detector, read-only snapshot
+    monitor_physics (priority 150) — speedhack/noclip detector, read-only snapshot
+    attacker        (priority  50) — attempts a write to read-only snapshot (ch 3)
+
+  The attacker PD runs at the lowest priority so the detectors always run first.
+  On its first notification it stores to the read-only mapping; seL4 raises a VM
+  fault and terminates the PD.  "BUG: attacker write succeeded" must not appear.
+
+  Physical memory layout: same as bench.system.
+-->
+<system>
+    <!-- 192 MB engine heap: 128 MB hunk + 4 MB zone + ~60 MB headroom -->
+    <memory_region name="heap" size="0xC000000" phys_addr="0x80000000" page_size="0x200000" />
+
+    <!-- 4 KB snapshot page immediately after heap.
+         bench maps rw; all other PDs map r (enforced at hardware page-table level). -->
+    <memory_region name="snapshot" size="0x1000" phys_addr="0x8C000000" />
+
+    <!-- ================================================================
+         Engine PD: runs SV_Frame loop, writes snapshot, notifies detectors
+         and attacker.  Priority 100 (below detectors, above attacker).
+         ================================================================ -->
+    <protection_domain name="bench" priority="100" pp="true" stack_size="0x200000">
+        <program_image path="bench.elf" />
+        <map mr="heap"     vaddr="0x80000000" perms="rw" cached="true"
+             setvar_vaddr="sel4_heap_base" />
+        <map mr="snapshot" vaddr="0x8C000000" perms="rw" cached="true"
+             setvar_vaddr="sel4_snapshot" />
+    </protection_domain>
+
+    <!-- ================================================================
+         Aimbot detector PD: priority 200 > bench (100).
+         ================================================================ -->
+    <protection_domain name="monitor_aim" priority="200" stack_size="0x10000">
+        <program_image path="monitor.elf" />
+        <map mr="snapshot" vaddr="0x8C000000" perms="r" cached="true"
+             setvar_vaddr="sel4_snapshot" />
+    </protection_domain>
+
+    <!-- ================================================================
+         Speedhack/noclip detector PD: priority 150.
+         ================================================================ -->
+    <protection_domain name="monitor_physics" priority="150" stack_size="0x10000">
+        <program_image path="physics.elf" />
+        <map mr="snapshot" vaddr="0x8C000000" perms="r" cached="true"
+             setvar_vaddr="sel4_snapshot" />
+    </protection_domain>
+
+    <!-- ================================================================
+         Attacker PD: priority 110 (above bench, below detectors).
+         Must be higher than bench (100) so that when bench calls
+         microkit_notify(ch 3) the attacker immediately preempts bench
+         and runs notified() — bench never yields to lower-priority PDs.
+         perms="r" — hardware page table enforces read-only.
+         ================================================================ -->
+    <protection_domain name="attacker" priority="110" stack_size="0x10000">
+        <program_image path="attacker.elf" />
+        <map mr="snapshot" vaddr="0x8C000000" perms="r" cached="true"
+             setvar_vaddr="sel4_snapshot" />
+    </protection_domain>
+
+    <!-- bench(ch=1) <-> monitor_aim(ch=1)     : per-frame notify -->
+    <channel>
+        <end pd="bench"       id="1" />
+        <end pd="monitor_aim" id="1" />
+    </channel>
+
+    <!-- bench(ch=2) <-> monitor_physics(ch=1) : per-frame notify -->
+    <channel>
+        <end pd="bench"           id="2" />
+        <end pd="monitor_physics" id="1" />
+    </channel>
+
+    <!-- bench(ch=3) <-> attacker(ch=3) : per-frame notify (MEMTEST_ATTACK build only) -->
+    <channel>
+        <end pd="bench"    id="3" />
+        <end pd="attacker" id="3" />
+    </channel>
+</system>

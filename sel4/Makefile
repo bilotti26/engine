@@ -18,6 +18,10 @@ MICROKIT_CONFIG  ?= debug
 BENCH_FRAMES     ?= 1000
 BUILD_DIR        ?= $(CURDIR)/build
 REPO_ROOT        := $(abspath $(CURDIR)/..)
+# Set ATTACK_BUILD=1 to include the attacker PD and compile with -DMEMTEST_ATTACK.
+ATTACK_BUILD     ?= 0
+# System file to pass to the Microkit tool (override for attack build).
+SYSTEM_FILE      ?= $(CURDIR)/bench.system
 
 ifndef MICROKIT_SDK
 $(error MICROKIT_SDK must be set to the path of the Microkit SDK)
@@ -72,6 +76,7 @@ CFLAGS := \
   -DBOTLIB \
   -DNO_VM_COMPILED \
   -DBENCH_FRAMES=$(BENCH_FRAMES) \
+  $(if $(filter 1,$(ATTACK_BUILD)),-DMEMTEST_ATTACK,) \
   -DUSE_ICON=0 \
   -DUSE_LOCAL_HEADERS \
   -DSTANDALONE \
@@ -198,9 +203,18 @@ REPORT_FILE  := $(BUILD_DIR)/report.txt
 ELF_FILE     := $(BUILD_DIR)/bench.elf
 MONITOR_ELF  := $(BUILD_DIR)/monitor.elf
 PHYSICS_ELF  := $(BUILD_DIR)/physics.elf
+ATTACKER_ELF := $(BUILD_DIR)/attacker.elf
 
 MONITOR_OBJ  := $(BUILD_DIR)/sel4/src/monitor.o
 PHYSICS_OBJ  := $(BUILD_DIR)/sel4/src/physics.o
+ATTACKER_OBJ := $(BUILD_DIR)/sel4/src/attacker.o
+
+# Extra ELFs to package when building the attack image
+ifeq ($(ATTACK_BUILD),1)
+  EXTRA_ELFS := $(ATTACKER_ELF)
+else
+  EXTRA_ELFS :=
+endif
 
 .PHONY: all clean
 
@@ -244,9 +258,18 @@ $(MONITOR_ELF): $(MONITOR_OBJ)
 $(PHYSICS_ELF): $(PHYSICS_OBJ)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-# Package all three PD ELFs with the Microkit tool
-$(IMAGE_FILE) $(REPORT_FILE): $(ELF_FILE) $(MONITOR_ELF) $(PHYSICS_ELF) $(CURDIR)/bench.system
-	$(MICROKIT_TOOL) $(CURDIR)/bench.system \
+# Compile and link the attacker PD (same minimal flags as detectors)
+$(ATTACKER_OBJ): $(CURDIR)/src/attacker.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(CC) -c $(DET_CFLAGS) -o $@ $<
+
+$(ATTACKER_ELF): $(ATTACKER_OBJ)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+# Package all PD ELFs with the Microkit tool.
+# $(SYSTEM_FILE) defaults to bench.system; pass bench_attack.system for attack builds.
+$(IMAGE_FILE) $(REPORT_FILE): $(ELF_FILE) $(MONITOR_ELF) $(PHYSICS_ELF) $(EXTRA_ELFS) $(SYSTEM_FILE)
+	$(MICROKIT_TOOL) $(SYSTEM_FILE) \
 	  --search-path $(BUILD_DIR) \
 	  --board $(MICROKIT_BOARD) \
 	  --config $(MICROKIT_CONFIG) \

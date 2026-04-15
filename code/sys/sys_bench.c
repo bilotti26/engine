@@ -207,6 +207,9 @@ extern uintptr_t sel4_snapshot;
 /* Channel IDs for the bench PD (match bench.system <end pd="bench" id=N>) */
 #define BENCH_CH_AIM      1
 #define BENCH_CH_PHYSICS  2
+#ifdef MEMTEST_ATTACK
+#  define BENCH_CH_ATTACKER 3
+#endif
 
 static void Bench_WriteSnapshot( unsigned int frame_num )
 {
@@ -280,6 +283,9 @@ static void Bench_WriteSnapshot( unsigned int frame_num )
 
 	microkit_notify( BENCH_CH_AIM );
 	microkit_notify( BENCH_CH_PHYSICS );
+#ifdef MEMTEST_ATTACK
+	microkit_notify( BENCH_CH_ATTACKER );
+#endif
 }
 
 void bench_sel4_main( void )
